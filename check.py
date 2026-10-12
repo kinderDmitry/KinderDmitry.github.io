@@ -4,8 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 SRC = os.environ.get("SRC_URL", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt")
 IPH, IPP = os.environ.get("IP_HOST", "api.ipify.org"), int(os.environ.get("IP_PORT", "80"))
 HDH, HDP = os.environ.get("HDR_HOST", "httpbin.org"), int(os.environ.get("HDR_PORT", "80"))
-MAX = int(os.environ.get("MAX", "6000"))
-KEEP = int(os.environ.get("KEEP", "300"))
+MAX = int(os.environ.get("MAX", "6000"))      # сколько проверять за запуск
+KEEP = int(os.environ.get("KEEP", "300"))     # сколько лучших в data.txt
 T = 6
 
 def recvn(s, n):
@@ -17,6 +17,7 @@ def recvn(s, n):
     return b
 
 def through(ip, port, host, hport, path):
+    """GET через SOCKS5 без логина. Возвращает (тело, мс)."""
     t0 = time.time()
     s = socket.create_connection((ip, port), timeout=T); s.settimeout(T)
     try:
@@ -45,7 +46,7 @@ def load():
     for l in txt.splitlines():
         m = re.search(r"(\d+\.\d+\.\d+\.\d+):(\d+)", l)
         if not m or m[1].startswith("45.74.31."): continue
-        if seen.get(m[1], 0) >= 2: continue
+        if seen.get(m[1], 0) >= 2: continue      # не больше 2 портов на один IP
         seen[m[1]] = seen.get(m[1], 0) + 1
         out.append((m[1], int(m[2])))
     random.seed(1); random.shuffle(out)
@@ -98,11 +99,12 @@ def main():
     rows = []
     for n, (r, a) in enumerate(zip(alive, anon), 1):
         x = g.get(r[3], {})
-        rows.append([n, r[0], r[1], r[2], r[3], x.get("countryCode", "ZZ"), x.get("country", ""), x.get("city", ""), a])
+        cc = x.get("countryCode", "ZZ")
+        rows.append([n, r[0], r[1], r[2], r[3], cc, x.get("country", ""), x.get("city", ""), a, f"socks://Og==@{r[0]}:{r[1]}#{cc}-{n}"])
     with open("results.csv", "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.writer(f); w.writerow(["№", "IP", "Порт", "Пинг мс", "Выходной IP", "Код", "Страна", "Город", "Анонимность"]); w.writerows(rows)
+        w = csv.writer(f); w.writerow(["№", "IP", "Порт", "Пинг мс", "Выходной IP", "Код", "Страна", "Город", "Анонимность", "Ссылка для Happ"]); w.writerows(rows)
     with open("data.txt", "w") as f:
-        for r in rows[:KEEP]: f.write(f"socks://Og==@{r[1]}:{r[2]}#{r[5]}-{r[0]}\n")
+        for r in rows[:KEEP]: f.write(r[9] + "\n")
     print("готово: data.txt", min(KEEP, len(rows)), "строк")
 
 if __name__ == "__main__": main()
